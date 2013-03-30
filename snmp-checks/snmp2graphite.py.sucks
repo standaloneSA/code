@@ -1,0 +1,25 @@
+#!/usr/bin/python
+
+impot re, os, sys, getopt, string, commands 
+from pysnmp.entity.rfc3413.oneliner import cmdgen
+from pysnmp.entity.rfc3413 import mibvar
+from pysnmp.proto import rfc1902
+
+SNMP_HOST='bullpup.ccs.neu.edu'
+SNMP_RO_STRING='publiccommunitygoeshere'
+SNMP_PORT = 161
+
+IOD_sysdescr=[1,3,6,1,2,1,1,0]
+
+def main():
+	cmdGen = cmdgen.CommandGenerator()
+	errorIndication, errorStatus, errorIndex, varBindTable = cmgGen.nextCmd(
+			cmdgen.CommunityData('duofold', SNMP_RO_STRING), cmdgen.UdpTransportTarget((SNMP_HOST, SNMP_PORT)), (('IF-MIB', 'ifDescr'),),)
+
+	if errorIndication:
+		print errorIndication
+	else:
+		if errorStatus:
+			print '%s at %s\n' % (errorStatus.prettyPrint(), varBindTable[-1] [int(errorIndex)-1])
+
+
