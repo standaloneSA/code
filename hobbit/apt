@@ -1,0 +1,176 @@
+#!/usr/bin/perl -w
+
+# Copyright (C) 2007, 2008 Christoph Berg <myon@debian.org>
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the "Software"), to deal in the Software without
+# restriction, including without limitation the rights to use,
+# copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following
+# conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
+use strict;
+use IPC::Open3;
+
+$ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin';
+$ENV{'LC_ALL'} = 'C';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+my %packages;
+
+my $finalReturnCode = 0;
+
+open P, "dpkg --get-selections |" or die "dpkg: $!";
+while (<P>) {
+	if (/^(\S+)\s+(\S+)/) {
+		next unless $2 eq "install" or $2 eq "hold";
+		$packages{$1} = $2;
+	}
+}
+close P;
+
+my $pid = open3(\*IN, \*P, \*ERR, qw/xargs -r apt-cache policy/);
+die "open2: $!" unless $pid;
+
+if (!fork()) {
+	close P;
+	foreach my $p (sort keys %packages) {
+		print IN "$p\n";
+	}
+	close IN;
+	exit 0;
+}
+close IN;
+close ERR;
+
+my ($pkg, $inst, $cand, $pin, $pinprio, $in_dist, $dist, $has_repo);
+my (@up, @upgrades, @sec, @security, @holdup, @holdupgrades, @holdsec, @holdsecurity, @no_repo, @no_repo_pinned);
+
+sub try_pkg ()
+{
+	if ($inst ne "(none)" and not $has_repo) {
+		if (defined $pin and $pinprio > 0) {
+			push @no_repo_pinned, "$pkg ($inst) $pinprio";
+		} else {
+			push @no_repo, "$pkg ($inst)";
+		}
+	}
+	return if $inst eq $cand;
+	if ($packages{$pkg} eq "hold") {
+		if ($dist and $dist =~ /updates/) {
+			push @holdsec, $pkg;
+			push @holdsecurity, "$pkg ($inst $cand)";
+		} else {
+			push @holdup, $pkg;
+			push @holdupgrades, "$pkg ($inst $cand)";
+		}
+		return;
+	}
+	if ($dist and $dist =~ /updates/) {
+		push @sec, $pkg;
+		push @security, "$pkg ($inst $cand)";
+	} else {
+		push @up, $pkg;
+		push @upgrades, "$pkg ($inst $cand)";
+	}
+}
+
+while (<P>) {
+	if (/^(\S+):/) {
+		my $next_pkg = $1;
+		try_pkg () if $pkg;
+		$pkg = $next_pkg;
+		undef $dist;
+		undef $has_repo;
+		undef $pin;
+		undef $pinprio;
+	}
+	$inst = $1 if / +Installed: (.+)/;
+	$cand = $1 if / +Candidate: (.+)/;
+	$pin = $1 if / +Package pin: (.+)/ and $1 eq $inst;
+	if (/^[ *]+(\S+) (\d+)$/) {
+		$in_dist = ($1 eq $cand);
+		$pinprio = $2;
+	}
+	if ($in_dist and /^ +\d+ \S+ (\S+)/) { # 700 http://localhost lenny/main Packages
+		$dist .= "$1 ";
+		$has_repo = 1 if /http|ftp/;
+	}
+}
+try_pkg ();
+close P;
+
+waitpid $pid, 0;
+
+sub setRetCode($) { 
+	my $rt = shift(@_);
+
+	if ($rt > $finalReturnCode) { 
+		$finalReturnCode = $rt;
+	}
+}
+
+# apt-get update will also exit with status 0 on some errors, and
+# /var/lib/apt/lists/lock will be updated in any case. We suggest to use
+# something like the following in /etc/cron.d/:
+# 44 */4   * * *  root  ! apt-get -qq update 2>&1 | grep -q . && date -u > /var/lib/apt/update_success
+#
+# stamp files in order of decreasing usefulness
+my @stamp_files = qw(/var/lib/apt/update_success /var/lib/apt/periodic/update-stamp /var/lib/apt/lists/lock);
+my $last_update;
+foreach my $stamp_file (@stamp_files) {
+	$last_update = -M $stamp_file;
+	last if $last_update;
+}
+
+my ($updatecolor, $retCode); 
+if ($last_update >= 7) {
+	$updatecolor = 'CRITICAL';
+	$retCode = 2;
+} elsif ($last_update >= 1.5) {
+	$updatecolor = 'WARNING';
+	$retCode = 1; 
+} else {
+	$updatecolor = 'OK';
+	$retCode = 0; 
+}
+setRetCode($retCode);
+
+sub pkgreport($$$\@;\@) {
+	my ($title, $color, $retCode, $longlist, $shortlist) = @_;
+
+	if (@{$longlist}) {
+
+		print($color, " - $title:\n"); 
+		print(' apt-get install ' . join (' ', @{$shortlist})) if $shortlist;
+
+		foreach (@{$longlist}) { print("   $_\n"); }
+	}
+	setRetCode($retCode); 
+}
+
+
+pkgreport('Security updates', 'CRITICAL', 2,  @security, @sec);
+pkgreport('Other updates', 'WARNING', 1, @upgrades, @up);
+pkgreport('Security updates on hold', 'OK', 0, @holdsecurity, @holdsec);
+pkgreport('Other updates on hold', 'OK', 0, @holdupgrades, @holdup);
+pkgreport('Packages not installed from apt repositories', 'OK', 0, @no_repo);
+pkgreport('Pinned packages not installed from apt repositories', 'OK', 0, @no_repo_pinned);
+
+printf("Last apt update: %.1f day(s) ago\n", $last_update);
+
+exit $finalReturnCode
