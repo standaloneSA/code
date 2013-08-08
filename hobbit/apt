@@ -58,15 +58,17 @@ close IN;
 close ERR;
 
 my ($pkg, $inst, $cand, $pin, $pinprio, $in_dist, $dist, $has_repo);
-my (@up, @upgrades, @sec, @security, @holdup, @holdupgrades, @holdsec, @holdsecurity, @no_repo, @no_repo_pinned);
+my (@up, @upgrades, @sec, @security, @holdup, @holdupgrades, @holdsec, @holdsecurity, @no_repo, @no_repo_pinned, @no_repo_pinned_short, @no_repo_short);
 
 sub try_pkg ()
 {
 	if ($inst ne "(none)" and not $has_repo) {
 		if (defined $pin and $pinprio > 0) {
 			push @no_repo_pinned, "$pkg ($inst) $pinprio";
+			push @no_repo_pinned_short, "$pkg";
 		} else {
 			push @no_repo, "$pkg ($inst)";
+			push @no_repo_short, "$pkg";
 		}
 	}
 	return if $inst eq $cand;
@@ -155,22 +157,22 @@ sub pkgreport($$$\@;\@) {
 
 	if (@{$longlist}) {
 
-		print($color, " - $title:\n"); 
-		print(' apt-get install ' . join (' ', @{$shortlist})) if $shortlist;
+		print("$retCode $title PACKAGES=", scalar(@{$longlist}) , " $color: @{$shortlist}\n"); 
+		#print(' apt-get install ' . join (' ', @{$shortlist})) if $shortlist;
 
-		foreach (@{$longlist}) { print("   $_\n"); }
+		#foreach (@{$longlist}) { print("   $_\n"); }
 	}
 	setRetCode($retCode); 
 }
 
 
-pkgreport('Security updates', 'CRITICAL', 2,  @security, @sec);
-pkgreport('Other updates', 'WARNING', 1, @upgrades, @up);
-pkgreport('Security updates on hold', 'OK', 0, @holdsecurity, @holdsec);
-pkgreport('Other updates on hold', 'OK', 0, @holdupgrades, @holdup);
-pkgreport('Packages not installed from apt repositories', 'OK', 0, @no_repo);
-pkgreport('Pinned packages not installed from apt repositories', 'OK', 0, @no_repo_pinned);
+pkgreport('Security_Updates', 'CRITICAL', 2,  @security, @sec);
+pkgreport('Other_updates', 'WARNING', 1, @upgrades, @up);
+pkgreport('Security_updates_on_hold', 'OK', 0, @holdsecurity, @holdsec);
+pkgreport('Other_updates_on_hold', 'OK', 0, @holdupgrades, @holdup);
+pkgreport('Packages_Not_From_apt', 'OK', 0, @no_repo, @no_repo_short);
+pkgreport('Pinned_packages_not_installed_from_apt repositories', 'OK', 0, @no_repo_pinned, @no_repo_pinned_short);
 
-printf("Last apt update: %.1f day(s) ago\n", $last_update);
+#printf("Last apt update: %.1f day(s) ago\n", $last_update);
 
 exit $finalReturnCode

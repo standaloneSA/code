@@ -55,7 +55,9 @@ if ( $vm -eq "" ) {
 		exit
 	}
 }
-if ( ( $viserver -eq "" ) -and ( $targetVMHost -eq "" ) ) { 
+if ( ( $targetDS -eq "" ) -and ( $targetVMHost -eq "" ) ) { 
+	Write-Host "viserver: $viserver"
+	Write-Host "targetVMHost: $targetVMHost"
 	usage
 	exit
 }
@@ -70,42 +72,51 @@ if ( ( $viserver -eq "" ) -and ( $targetVMHost -eq "" ) ) {
 ############
 
 function migrateDS { 
+	Write-Host "In migrateDS"
 	Try { $ds = Get-Datastore -VMHost ($vm2m.Host) -name $targetDS} 
-	Catch { $Host.UI.WriteErrorLine("Error finding $targetDS on the proper vmhost: " + $error[0]) ; exit } 
+	Catch { $Host.UI.WriteErrorLine( "Error finding $targetDS on the proper vmhost: " + $error[0]) ; exit } 
 
 	Try { Move-VM -vm $vm2m -datastore $ds } 
-	Catch { $Host.UI.WriteErrorLine("Error migrating to new datastire: " + $error[0]) ; exit }
+	Catch { $Host.UI.WriteErrorLine( "Error migrating to new datastire: " + $error[0]) ; exit }
 		
 } # end function migrate
 
 function migrateVHost { 
+	Write-Host "In migrateVHost"
 	Try { $vmh = Get-VMHost -name $targetVMHost } 
-	Catch { $Host.UI.WriteErrorLine("Error connecting to vmHost $targetVMHost: " + $error[0]) ; exit } 
+	Catch { $Host.UI.WriteErrorLine( "Error connecting to vmHost $targetVMHost: " + $error[0]) ; exit } 
 
 	Try { Move-VM -VM $vm2m -Destination $vmh } 
-	Catch { $Host.UI.WriteErrorLine("Error moving $vm to $targetVMHost: " + $error[0]) ; exit }
+	Catch { $Host.UI.WriteErrorLine( "Error moving $vm to $targetVMHost: " + $error[0]) ; exit }
 
 } # end function migrateVHost
 
 function suspend { 
+	Write-Host "In suspend"
 	# Before suspending, we really need to make sure that all of the removable media is detached because
 	# it won't migrate with the VM. If it's not accessible to the remote host, the vmotion will fail. 
 	Try { $vm2m | Get-CDDrive | Set-CDDrive -NoMedia -Confirm:$false }
-	Catch { $Host.UI.WriteErrorLine("Error detaching CD ROM contents to $vm2m: " + $error[0]) ; exit }
+	Catch { $Host.UI.WriteErrorLine( "Error detaching CD ROM contents to $vm2m: " + $error[0]) ; exit }
 
 	# do the suspend, blocking so we're sure that it's complete
 	Try { $vm2m | Suspend-VM -Confirm:$false } 
-	Catch { $Host.UI.WriteErrorLine("Error suspending vm $vm2m. Please check this out manually: " + $error[0]) ; exit }
+	Catch { $Host.UI.WriteErrorLine( "Error suspending vm $vm2m. Please check this out manually: " + $error[0]) ; exit }
 	
 } # end function suspend
 
 function revive { 
+	# There is a weird bug. If we use the original variable assignment, it sees 
+	# the VM as PoweredOn. If we reassign the variable, it triggers a reread, 
+	# and it gets the proper state of Suspended. Since we're not holding open
+	# any pointers to the object, we'll be ok reassigning it here. 
+	$vm2m = Get-VM -name $vm
+	
 	# Wake the machine back up after suspension
 	if ( $vm2m.PowerState -ne "Suspended" ) { 
 		Write-Warning "Warning: $vm2m is not not suspended. Maybe this is okay? Continuing..." 
 	} else { 
 		Try { $vm2m | Start-VM } 
-		Catch { $Host.UI.WriteErrorLine("Error reviving $vm2m. Please fix by hand: " + $error[0]) ; exit } 
+		Catch { $Host.UI.WriteErrorLine( "Error reviving $vm2m. Please fix by hand: " + $error[0]) ; exit } 
 	} 
 }
 
@@ -118,12 +129,15 @@ $vm2m = get-vm -name $vm
 # I'll trade the code length for the ability to edit it later to add
 # provisions for doing other things under certain conditions with the
 # VMs. 
+Write-Host "vm: -$vm-"
+Write-Host "targetDS: -$targetDS-"
+Write-Host "targetVMHost: -$targetVMHost-"
 switch ($vm2m.PowerState) { 
 	"PoweredOff" { 
-		if ( $targetDS -ne "" ) { 
+		if ( $targetDS -ne $null ) { 
 			migrateDS
 		} 
-		if ( $targetVHost -ne "" ) { 
+		if ( $targetVMHost -ne $null ) { 
 			migrateVHost
 		}
 	}
@@ -139,24 +153,25 @@ switch ($vm2m.PowerState) {
 			Write-Host "Reviving $vm2m"
 			revive
 		} 
-		if ( $targetVHost -ne "" ) { 
+		if ( $targetVMHost -ne "" ) { 
 			Write-Host "Migrating $vm2m to new vHost"
 			migrateVHost
 		}
 	}
 	"Suspended" {
+		Write-Host "Found a suspended VM"
 		if ( $targetDS -ne "" ) { 
-			Write-Host "Migrating $vm2m to new datastore"
+			Write-Host "Migrating $vm2m to new datastore: $targetDS!"
 			migrateDS
 		} 
-		if ( $targetVHost -ne "" ) { 
+		if ( $targetVMHost -ne "" ) { 
 			Write-Host "Migrating $vm2m to new vHost"
 			migrateVHost
 		}
 	}
 	default { 
 		# some kind of problem. punt.
-		$Host.UI.WriteErrorLine("Error: $vm2m is in an unknown state (not PoweredOff, PoweredOn, or Suspended): ")
+		$Host.UI.WriteErrorLine( "Error: $vm2m is in an unknown state (not PoweredOff, PoweredOn, or Suspended): ")
 		exit
 	}
 } # end switch statement

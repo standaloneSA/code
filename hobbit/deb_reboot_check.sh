@@ -38,49 +38,29 @@ case "$?" in
 	# Should probably add error checking on whether or not /var/run/reboot-required can be read (eg: /, /var, /var/run are all readable, executable dirs)
 	if [ -e /var/run/reboot-required ]; then
 		COLOR=WARNING
-		MSG="Updates have been installed which require a reboot to take effect.
-
-Please reboot at your earliest convenience.
-
-/var/run/reboot-required says:
-
-$(/bin/sed 's/^/\t/' /var/run/reboot-required)
-"
+		MSG="Updates have been installed which require a reboot to take effect. "
 		EXIT_STATUS=1;
 	else
 		COLOR=OK
-		MSG="No updates which require a reboot to take effect have
-triggered update-notifier since last system boot."
+		MSG="No updates which require a reboot to take effect have triggered update-notifier since last system boot."
 		EXIT_STATUS=0;
 	fi
 	;;
 1)	# update-notifier-common is not installed, report clear
 	COLOR=WARNING
-	MSG="update-notifier-common not installed.
-
-Cannot determine if a reboot is required.
-
-Please install update-notifier-common.
-"
+	MSG="update-notifier-common not installed.  Cannot determine if a reboot is required.  Please install update-notifier-common.  "
 	EXIT_STATUS=1
 	;;
 *)	# Unknow response to dpkg-query (this should never happen), report red:
 	COLOR=CRITICAL
-	MSG="
-Unexpected problem encountered while executing dpkg-query to check for
-the presence of the update-notifier-common package. This should not happen.
-
-Cannot complete check. Please check system status.
-
-Aborting plugin execution.
-"
+	MSG=" Unexpected problem encountered while executing dpkg-query to check for the presence of the update-notifier-common package. This should not happen.  "
 	EXIT_STATUS=2
 	;;
 esac
 
 ##$BB $BBDISP "status $MACHINE.$COLUMN $COLOR $TIME
 
-echo "$COLOR - Reboot Status $MSG" ;
+echo "$EXIT_STATUS reboot reboot=$EXIT_STATUS $COLOR - Reboot: Status $MSG" ;
 
 
-exit $EXIT_STATUS
+#exit $EXIT_STATUS
