@@ -72,6 +72,40 @@ phoenix
 class_script_pack
 dir
 
+ia_include.ps1
+file
+349
+
+
+
+2013-09-06T20:44:37.737217Z
+d4e133b045118f29ea5de305a011535c
+2013-09-13T18:03:00.575853Z
+349
+msimmons
+has-props
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+33871
+
 start-vms - ia5010.ps1
 file
 
@@ -248,40 +282,6 @@ phoenix
 IA-Class-Management
 dir
 
-reset-ia-lab.ps1
-file
-
-
-
-
-2012-10-01T20:21:05.363666Z
-de704628043cb4f7a3ceef1b864d7d86
-2011-11-21T21:15:20.571406Z
-242
-phoenix
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-6248
-
 configure-ia-esx.ps1
 file
 
@@ -318,6 +318,40 @@ phoenix
 
 ia5210-spring2013
 dir
+
+reset-ia-lab.ps1
+file
+
+
+
+
+2012-10-01T20:21:05.363666Z
+de704628043cb4f7a3ceef1b864d7d86
+2011-11-21T21:15:20.571406Z
+242
+phoenix
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+6248
 
 get-nics - ia5010.ps1
 file
